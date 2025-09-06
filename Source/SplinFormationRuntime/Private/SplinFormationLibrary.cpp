@@ -41,16 +41,20 @@ void USplinFormationLibrary::CopyTerrainSpline(ALandscapeSplineActor* LSA, USpli
 		TempSpline->UpdateSpline();
 	}
 
+
 	Destination->ClearSplinePoints();
 	int32 TempPointCount = TempSpline->GetNumberOfSplinePoints();
 	for (int32 i = 0; i < TempPointCount; i++)
 	{
 		FSplinePoint TempPoint = TempSpline->GetSplinePointAt(i, ESplineCoordinateSpace::World);
+		if (i == 0)
+			Destination->SetWorldLocation(TempPoint.Position);
 		Destination->AddSplinePoint(TempPoint.Position, ESplineCoordinateSpace::World, true);
 	}
 
 	//This looks ridiculous but we DO have to go through it again to add proper tangents with everything connected
-	for (int32 i = 0; i < TempPointCount - 1; i++)
+	//Also skip the first and the last because the tangents cause weird behaviors on those nodes
+	for (int32 i = 1; i < TempPointCount - 1; i++)
 	{
 		FSplinePoint TempPoint = TempSpline->GetSplinePointAt(i, ESplineCoordinateSpace::World);
 		Destination->SetTangentsAtSplinePoint(i, TempPoint.ArriveTangent, TempPoint.LeaveTangent, ESplineCoordinateSpace::World, true);
@@ -70,32 +74,52 @@ void USplinFormationLibrary::GenerateOffsetSpline(USplineComponent* Base, USplin
 	const float SplineLength = Base->GetSplineLength();
 	UE_LOG(LogTemp, Warning, TEXT("Base Length: %f"), SplineLength);
 
-	const int32 NumPoints = FMath::FloorToInt(SplineLength / CloneDensity);
+	const int32 NumPoints = FMath::CeilToInt(SplineLength / CloneDensity);
 	UE_LOG(LogTemp, Warning, TEXT("Num Points: %d"), NumPoints);
 
 	const FVector ZVector = FVector(0.f, 0.f, ZOffset);
 
 	TArray<FVector> Points;
+	FRotator EndRotation;
 	for (int32 i = 0; i <= NumPoints; i++)
 	{
-		float Distance = i * CloneDensity;
+		float IncrementDistance = i * CloneDensity;
+		float Distance = (Base->GetSplineLength() > IncrementDistance) ? IncrementDistance : Base->GetSplineLength();
+		if (i == NumPoints)
+			EndRotation = Base->GetRotationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World) + FRotator(0.f, 180.f, 0.f);
 		FVector Location = Base->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
 		FVector RightVec = Base->GetRightVectorAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
 		//FVector N_Tan = Base->GetTangentAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World).GetSafeNormal();
 
 		FVector PointLocation = Location + (RightVec * LateralOffset) + ZVector;
 		Points.Add(PointLocation);
-	}
+
+	}	
 
 	UE_LOG(LogTemp, Warning, TEXT("Actual Generated Points: %d"), Points.Num());
 
-	if (reverse)
-		Algo::Reverse(Points);
+	if (Points.Num() > 0)
+	{
+		if (reverse)
+		{
+			Algo::Reverse(Points);
+		}
 
-	Target->ClearSplinePoints(false);
 
-	Target->SetSplinePoints(Points, ESplineCoordinateSpace::World, false);
-	Target->UpdateSpline();
+
+		Target->SetWorldLocation(Points[0]);
+		if (reverse)
+		{
+			Target->SetWorldRotation(EndRotation);
+		} else {
+			Target->SetWorldRotation(Base->GetWorldRotationAtDistanceAlongSpline(0.f));
+		}
+		Target->UpdateSpline();
+		Target->ClearSplinePoints(false);
+
+		Target->SetSplinePoints(Points, ESplineCoordinateSpace::World, false);
+		Target->UpdateSpline();
+	}
 }
 
 bool USplinFormationLibrary::RandomPacking(const TArray<float>& Widths, float OverallWidth, TArray<int32>& OutCounts)
