@@ -26,6 +26,9 @@ struct FHouseOption
     float Width = 0.f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Houses")
+    float BreezeWidth = 0.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Houses")
     EHouseType Type = EHouseType::Regular;
 };
 
@@ -54,6 +57,6 @@ public:
     static void GenerateOffsetSpline(USplineComponent* Base, USplineComponent* Target, float LateralOffset = 0.f, float ZOffset = 0.f, float CloneDensity = 100.f, bool reverse = false);
 
     UFUNCTION(BlueprintCallable, Category = "Houses")
-    static bool RandomPackHouses(const TArray<FHouseOption>& Houses, float OverallWidth, bool EndHouses, FLayoutResult& OutLayout);
+    static bool RandomPackHouses(const TArray<FHouseOption>& Houses, float OverallWidth, bool Breezeway, bool EndHouses, FLayoutResult& OutLayout);
 
 };

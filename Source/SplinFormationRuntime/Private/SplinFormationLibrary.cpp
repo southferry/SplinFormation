@@ -139,18 +139,40 @@ void ShuffleHouses(TArray<FHouseOption>& Arr)
 	}
 }
 
+int32 widthOfHouses(bool Breezeway, bool StartsEven, int32 HWidth, int32 BWidth, int32 Num)
+{
+	int32 TotalWidth = 0;
+	for (int32 i = 0; i < Num; i++)
+	{
+		bool Even = (i % 2 == 0);
+		int32 CurrWidth = HWidth;
+		if (Breezeway && ((StartsEven && Even) || (!StartsEven && !Even)))
+			CurrWidth += BWidth;
+		TotalWidth += CurrWidth;
+	}
+	return TotalWidth;
+}
+
+int32 numHousesForWidth(bool Breezeway, bool StartsEven, int32 HWidth, int32 BWidth, int32 TargetWidth)
+{
+	int32 Count = 0;
+	while (true)
+	{
+		int32 Width = widthOfHouses(Breezeway, StartsEven, HWidth, BWidth, Count);
+		if (Width > TargetWidth)
+			return Count - 1;
+		Count++;
+	}
+}
+
+
 bool RandomPacking(
 	const TArray<FHouseOption>& Houses,
 	int32 OverallWidth,
+	bool Breezeway,
 	FLayoutResult& OutLayout)
 {
 	OutLayout.Sequence.Empty();
-
-	// Convert to ints
-	TArray<int32> IntWidths;
-	IntWidths.Reserve(Houses.Num());
-	for (auto& H : Houses)
-		IntWidths.Add(FMath::RoundToInt(H.Width));
 
 	TArray<const FHouseOption*> Candidates;
 	for (auto& H : Houses)
@@ -159,6 +181,13 @@ bool RandomPacking(
 		if (!FMath::IsNearlyEqual(H.Width, (float)AsInt, 1e-3f))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("One of the House Widths was not close enough to an integer"));
+			return false;
+		}
+
+		int32 BrAsInt = FMath::RoundToInt(H.BreezeWidth);
+		if (!FMath::IsNearlyEqual(H.BreezeWidth, (float)BrAsInt, 1e-3f))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("One of the House Breezeway Widths was not close enough to an integer"));
 			return false;
 		}
 
@@ -198,9 +227,14 @@ bool RandomPacking(
 			if (Index >= Candidates.Num())
 				return;
 
+			int32 HouseIndex = State.Seq.Num();
+			bool EvenIndex = (HouseIndex % 2 == 0);
+
+			
 			const FHouseOption* Candidate = Candidates[Index];
 			const int32 Width = FMath::RoundToInt(Candidate->Width);
-			const int32 MaxCount = RemainingWidth / Width;
+			const int32 BrWidth = FMath::RoundToInt(Candidate->BreezeWidth);
+			const int32 MaxCount = numHousesForWidth(Breezeway, EvenIndex, Width, BrWidth, RemainingWidth);
 
 			for (int32 Count = 0; Count <= MaxCount; ++Count)
 			{
@@ -211,7 +245,7 @@ bool RandomPacking(
 					Next.Seq.Add(*Candidate);
 				}
 
-				Search(Index + 1, RemainingWidth - Count * Width, Next);
+				Search(Index + 1, RemainingWidth - widthOfHouses(Breezeway, EvenIndex, Width, BrWidth, Count), Next);
 			}
 		};
 
@@ -224,7 +258,18 @@ bool RandomPacking(
 		return false;
 	}
 
+
+
 	const int32 Picked = FMath::RandHelper(ValidResults.Num());
+	for (int solution = 0; solution < ValidResults.Num(); solution++)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Solution %d"), solution);
+
+		for (int i = 0; i < ValidResults[solution].Sequence.Num(); i++)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("House: %s"), *ValidResults[solution].Sequence[i].Key);
+		}
+	}
 	OutLayout = ValidResults[Picked];
 	return true;
 }
@@ -232,6 +277,7 @@ bool RandomPacking(
 bool RandomTypedPacking(
 	const TArray<FHouseOption>& Houses,
 	int32 OverallWidth,
+	bool Breezeway,
 	FLayoutResult& OutLayout)
 {
 	OutLayout.Sequence.Empty();
@@ -274,7 +320,8 @@ bool RandomTypedPacking(
 	{
 		for (const FHouseOption* End : EndCandidates)
 		{
-			const int32 Remaining = OverallWidth - (FMath::RoundToInt(Start->Width) + FMath::RoundToInt(End->Width));
+			const float StartWidth = Breezeway ? Start->Width + Start->BreezeWidth : Start->Width;
+			const int32 Remaining = OverallWidth - (FMath::RoundToInt(StartWidth) + FMath::RoundToInt(End->Width));
 			if (Remaining < 0)
 				continue;
 
@@ -308,9 +355,15 @@ bool RandomTypedPacking(
 					if (Index >= MiddleCandidates.Num())
 						return;
 
+					// Determine if starting position even/odd (offset by 1 b/c start house)
+					int32 HouseIndex = State.Seq.Num() + 1;
+					bool EvenIndex = (HouseIndex % 2 == 0);
+
 					const FHouseOption* Candidate = MiddleCandidates[Index];
 					const int32 Width = FMath::RoundToInt(Candidate->Width);
-					const int32 MaxCount = RemainingWidth / Width;
+					const int32 BrWidth = FMath::RoundToInt(Candidate->BreezeWidth);
+					// How many of this house, factoring breezeways, fully fit in the space remaining
+					const int32 MaxCount = numHousesForWidth(Breezeway, EvenIndex, Width, BrWidth, RemainingWidth);
 
 					for (int32 Count = 0; Count <= MaxCount; ++Count)
 					{
@@ -320,8 +373,8 @@ bool RandomTypedPacking(
 						{
 							Next.Seq.Add(*Candidate);
 						}
-						
-						Search(Index + 1, RemainingWidth - Count * Width, Next);
+
+						Search(Index + 1, RemainingWidth - widthOfHouses(Breezeway, EvenIndex, Width, BrWidth, Count), Next);
 					}
 				};
 
@@ -340,7 +393,7 @@ bool RandomTypedPacking(
 	return true;
 }
 
-bool USplinFormationLibrary::RandomPackHouses(const TArray<FHouseOption>& Houses, float OverallWidth, bool EndHouses, FLayoutResult& OutLayout)
+bool USplinFormationLibrary::RandomPackHouses(const TArray<FHouseOption>& Houses, float OverallWidth, bool Breezeway, bool EndHouses, FLayoutResult& OutLayout)
 {
 
 	if (Houses.Num() == 0 || OverallWidth <= 0.f)
@@ -358,9 +411,9 @@ bool USplinFormationLibrary::RandomPackHouses(const TArray<FHouseOption>& Houses
 
 	if (EndHouses) 
 	{
-		return RandomTypedPacking(Houses, IntOverall, OutLayout);
+		return RandomTypedPacking(Houses, IntOverall, Breezeway, OutLayout);
 	}
 	else {
-		return RandomPacking(Houses, IntOverall, OutLayout);
+		return RandomPacking(Houses, IntOverall, Breezeway, OutLayout);
 	}
 }
