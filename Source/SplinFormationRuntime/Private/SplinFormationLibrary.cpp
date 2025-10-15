@@ -124,6 +124,11 @@ void USplinFormationLibrary::GenerateOffsetSpline(USplineComponent* Base, USplin
 	}
 }
 
+
+/**
+	HOUSE GEN PACKING HELPERS
+**/
+
 void ShuffleHouses(TArray<FHouseOption>& Arr)
 {
 	int32 Num = Arr.Num();
@@ -258,18 +263,7 @@ bool RandomPacking(
 		return false;
 	}
 
-
-
 	const int32 Picked = FMath::RandHelper(ValidResults.Num());
-	for (int solution = 0; solution < ValidResults.Num(); solution++)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Solution %d"), solution);
-
-		for (int i = 0; i < ValidResults[solution].Sequence.Num(); i++)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("House: %s"), *ValidResults[solution].Sequence[i].Key);
-		}
-	}
 	OutLayout = ValidResults[Picked];
 	return true;
 }
