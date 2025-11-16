@@ -110,12 +110,12 @@ void USplinFormationLibrary::GenerateOffsetSpline(USplineComponent* Base, USplin
 
 
 		Target->SetWorldLocation(Points[0]);
-		if (reverse)
-		{
-			Target->SetWorldRotation(EndRotation);
-		} else {
-			Target->SetWorldRotation(Base->GetWorldRotationAtDistanceAlongSpline(0.f));
-		}
+
+		FRotator FirstRot = Base->GetRotationAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World);
+		double StartingYaw = reverse ? EndRotation.Yaw : FirstRot.Yaw;
+		
+		Target->SetWorldRotation(FRotator(0, StartingYaw, 0));
+		
 		Target->UpdateSpline();
 		Target->ClearSplinePoints(false);
 
